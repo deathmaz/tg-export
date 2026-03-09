@@ -213,6 +213,20 @@ Channel IDs starting with `-100` must be passed with the `-c` flag:
 tg-export export -c -100123456789 --last 24h
 ```
 
+## Testing
+
+```bash
+pip install -e ".[dev]"
+pytest tests/ -v
+```
+
+Tests cover:
+- Config parsing (durations, dates, flag precedence)
+- Text formatting (all entity types, nesting, XSS escaping)
+- Pagination (page splits, tdesktop filename convention, nav links)
+- Message grouping (join window, date separators, service messages)
+- HTML rendering (file generation, tdesktop CSS classes, multi-page output)
+
 ## License
 
 MIT
