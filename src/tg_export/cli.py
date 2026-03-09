@@ -10,7 +10,7 @@ from rich.table import Table
 
 from tg_export.auth import authenticate, connect_existing, get_api_credentials
 from tg_export.config import compute_from_date, compute_to_date
-from tg_export.fetcher import fetch_and_process_messages, get_channel_info, list_dialogs
+from tg_export.fetcher import entity_name, fetch_and_process_messages, get_channel_info, list_dialogs
 from tg_export.models import ExportConfig
 from tg_export.renderer import HtmlRenderer
 
@@ -35,8 +35,7 @@ def auth(api_id, api_hash, phone, session_dir):
     async def _auth():
         client = await authenticate(resolved_id, resolved_hash, phone, session_dir)
         me = await client.get_me()
-        name = f"{me.first_name or ''} {me.last_name or ''}".strip()
-        console.print(f"Logged in as: [bold]{name}[/bold] (@{me.username or 'N/A'})")
+        console.print(f"Logged in as: [bold]{entity_name(me)}[/bold] (@{me.username or 'N/A'})")
         await client.disconnect()
 
     asyncio.run(_auth())

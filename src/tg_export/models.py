@@ -20,7 +20,6 @@ class ExportedMessage:
     sender_name: str
     sender_id: int | None
     text_html: str
-    media_type: str | None = None  # "photo", "video", "voice", "document", etc.
     media_path: str | None = None  # Relative path to downloaded media
     media_html: str = ""
     reply_to_id: int | None = None
@@ -46,8 +45,6 @@ class ChannelInfo:
     id: int
     title: str
     username: str | None = None
-    description: str | None = None
-    photo_path: str | None = None
     member_count: int | None = None
     message_count: int = 0
 
@@ -69,7 +66,6 @@ class ExportConfig:
     to_date: datetime | None = None
     limit: int | None = None
     download_media: bool = True
-    media_types: list[str] = field(default_factory=lambda: ["photo", "video", "document", "voice", "sticker"])
     max_media_size_bytes: int = 50 * 1024 * 1024  # 50 MB
     msgs_per_page: int = 1000
     use_takeout: bool = True

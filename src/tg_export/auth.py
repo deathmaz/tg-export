@@ -68,10 +68,10 @@ async def authenticate(
     await client.send_code_request(phone)
     code = Prompt.ask("Enter the verification code sent to your Telegram")
 
+    from telethon.errors import SessionPasswordNeededError
     try:
         await client.sign_in(phone, code)
-    except Exception:
-        # Might need 2FA password
+    except SessionPasswordNeededError:
         password = Prompt.ask("Enter your 2FA password", password=True)
         await client.sign_in(password=password)
 
