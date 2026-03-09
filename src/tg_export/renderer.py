@@ -1,9 +1,9 @@
 """HTML rendering orchestrator."""
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import timedelta
-from importlib import resources as pkg_resources
 from pathlib import Path
 
 from rich.console import Console
@@ -55,8 +55,38 @@ class HtmlRenderer:
                     shutil.rmtree(dst)
                 shutil.copytree(src, dst)
 
-    def render_index(self, channels: list[ChannelInfo]) -> None:
-        """Generate export_results.html listing exported channels."""
+    def save_channel_meta(self, channel: ChannelInfo, chat_dir: Path) -> None:
+        """Save channel metadata to a JSON file in the chat directory."""
+        meta = {
+            "id": channel.id,
+            "title": channel.title,
+            "username": channel.username,
+            "message_count": channel.message_count,
+        }
+        (chat_dir / "channel.json").write_text(json.dumps(meta), encoding="utf-8")
+
+    def _load_all_channels(self) -> list[ChannelInfo]:
+        """Scan chats/ directory and load channel metadata from all exports."""
+        chats_dir = self.output_dir / "chats"
+        if not chats_dir.exists():
+            return []
+        channels = []
+        for chat_dir in sorted(chats_dir.iterdir()):
+            meta_file = chat_dir / "channel.json"
+            if meta_file.exists():
+                meta = json.loads(meta_file.read_text())
+                channels.append(ChannelInfo(
+                    id=meta["id"],
+                    title=meta["title"],
+                    username=meta.get("username"),
+                    message_count=meta.get("message_count", 0),
+                ))
+        return channels
+
+    def render_index(self, channels: list[ChannelInfo] | None = None) -> None:
+        """Generate export_results.html listing all exported channels."""
+        if channels is None:
+            channels = self._load_all_channels()
         template = self.env.get_template("index.html.j2")
         html = template.render(channels=channels)
         (self.output_dir / "export_results.html").write_text(html, encoding="utf-8")

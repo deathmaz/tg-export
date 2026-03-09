@@ -140,7 +140,8 @@ def export(
         renderer = HtmlRenderer(output_dir, config)
         renderer.copy_static_assets()
         renderer.render_channel(channel_info, messages, chat_dir)
-        renderer.render_index([channel_info])
+        renderer.save_channel_meta(channel_info, chat_dir)
+        renderer.render_index()  # Rebuilds from all chat dirs
 
         console.print(f"\n[green bold]Export complete![/green bold]")
         console.print(f"  Output: {output_dir.resolve()}")

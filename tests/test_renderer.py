@@ -215,7 +215,7 @@ class TestHtmlRendering:
             assert (chat_dir / "messages3.html").exists()
             assert not (chat_dir / "messages4.html").exists()
 
-    def test_render_index(self):
+    def test_render_index_with_explicit_channels(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
             config = ExportConfig(output_dir=str(output_dir))
@@ -232,6 +232,45 @@ class TestHtmlRendering:
             assert "Channel One" in index_html
             assert "Channel Two" in index_html
             assert "100 messages" in index_html
+
+    def test_render_index_from_saved_metadata(self):
+        """Index should list all previously exported channels."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            config = ExportConfig(output_dir=str(output_dir))
+            renderer = HtmlRenderer(output_dir, config)
+
+            # Simulate two separate exports
+            ch1 = ChannelInfo(id=1, title="First Channel", username="first", message_count=10)
+            chat_dir1 = output_dir / "chats" / "chat_1"
+            chat_dir1.mkdir(parents=True)
+            renderer.save_channel_meta(ch1, chat_dir1)
+
+            ch2 = ChannelInfo(id=2, title="Second Channel", message_count=20)
+            chat_dir2 = output_dir / "chats" / "chat_2"
+            chat_dir2.mkdir(parents=True)
+            renderer.save_channel_meta(ch2, chat_dir2)
+
+            # Render index without passing channels — should discover both
+            renderer.render_index()
+
+            index_html = (output_dir / "export_results.html").read_text()
+            assert "First Channel" in index_html
+            assert "Second Channel" in index_html
+            assert "10 messages" in index_html
+            assert "20 messages" in index_html
+
+    def test_render_index_empty_chats_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            config = ExportConfig(output_dir=str(output_dir))
+            renderer = HtmlRenderer(output_dir, config)
+            renderer.copy_static_assets()
+
+            renderer.render_index()
+
+            index_html = (output_dir / "export_results.html").read_text()
+            assert "Exported Data" in index_html
 
     def test_static_assets_copied(self):
         with tempfile.TemporaryDirectory() as tmpdir:
