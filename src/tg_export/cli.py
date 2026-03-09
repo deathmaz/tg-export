@@ -75,8 +75,8 @@ def list_channels(api_id, api_hash, session_dir):
 
 
 @main.command()
-@click.argument("channel", required=False, default=None)
-@click.option("-c", "--channel", "channel_opt", type=str, default=None, help="Channel (@username, invite link, or numeric ID)")
+@click.argument("channels", nargs=-1)
+@click.option("-c", "--channel", "channel_opts", type=str, multiple=True, help="Channel (@username, invite link, or numeric ID). Repeatable.")
 @click.option("-o", "--output", type=str, default="./export", help="Output directory")
 @click.option("--api-id", type=int, default=None, help="Telegram API ID")
 @click.option("--api-hash", type=str, default=None, help="Telegram API hash")
@@ -84,7 +84,7 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("--from-date", type=str, default=None, help="Start date (ISO format: YYYY-MM-DD)")
 @click.option("--to-date", type=str, default=None, help="End date (ISO format: YYYY-MM-DD)")
 @click.option("--last", type=str, default=None, help="Relative duration: 24h, 7d, 2w, 1m")
-@click.option("--limit", type=int, default=None, help="Max number of messages")
+@click.option("--limit", type=int, default=None, help="Max number of messages per channel")
 @click.option("--no-media", is_flag=True, default=False, help="Skip media downloads")
 @click.option("--max-media-size", type=int, default=50, help="Max media file size in MB (default: 50)")
 @click.option("--msgs-per-page", type=int, default=1000, help="Messages per HTML page (default: 1000)")
@@ -92,18 +92,25 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("--wait-time", type=float, default=None, help="Seconds between API requests")
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
 def export(
-    channel, channel_opt, output, api_id, api_hash, session_dir,
+    channels, channel_opts, output, api_id, api_hash, session_dir,
     from_date, to_date, last, limit, no_media, max_media_size,
     msgs_per_page, takeout, wait_time, verbose,
 ):
-    """Export messages from a Telegram channel to static HTML.
+    """Export messages from Telegram channels to static HTML.
 
     CHANNEL can be a @username, invite link, or numeric ID.
+    Multiple channels can be provided as arguments or via -c flags.
     For negative IDs, use -c flag: tg-export export -c -100123456789
+
+    \b
+    Examples:
+      tg-export export @channel1 @channel2 --last 24h
+      tg-export export -c -100111 -c -100222 --last 7d
+      tg-export export @public -c -100private --last 24h
     """
-    channel = channel_opt or channel
-    if not channel:
-        raise click.UsageError("Provide a channel as argument or via -c flag.")
+    all_channels = list(channels) + list(channel_opts)
+    if not all_channels:
+        raise click.UsageError("Provide at least one channel as argument or via -c flag.")
     resolved_id, resolved_hash = get_api_credentials(api_id, api_hash)
 
     config = ExportConfig(
@@ -120,32 +127,42 @@ def export(
 
     async def _export():
         client = await connect_existing(resolved_id, resolved_hash, session_dir)
-
-        console.print(f"[bold]Resolving channel:[/bold] {channel}")
-        channel_info = await get_channel_info(client, channel)
-        console.print(f"  Channel: [bold]{channel_info.title}[/bold] (ID: {channel_info.id})")
-
         output_dir = Path(config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        chat_dir = output_dir / "chats" / f"chat_{channel_info.id}"
-        chat_dir.mkdir(parents=True, exist_ok=True)
-
-        console.print("[bold]Fetching messages...[/bold]")
-        messages = await fetch_and_process_messages(
-            client, channel_info, config, chat_dir
-        )
-        console.print(f"  [green]Fetched {len(messages)} messages[/green]")
-
-        console.print("[bold]Generating HTML...[/bold]")
         renderer = HtmlRenderer(output_dir, config)
         renderer.copy_static_assets()
-        renderer.render_channel(channel_info, messages, chat_dir)
-        renderer.save_channel_meta(channel_info, chat_dir)
-        renderer.render_index()  # Rebuilds from all chat dirs
+
+        for i, ch in enumerate(all_channels, 1):
+            console.print(f"\n[bold][{i}/{len(all_channels)}] Resolving channel:[/bold] {ch}")
+            try:
+                channel_info = await get_channel_info(client, ch)
+            except Exception as e:
+                console.print(f"  [red]Failed to resolve: {e}[/red]")
+                continue
+
+            console.print(f"  Channel: [bold]{channel_info.title}[/bold] (ID: {channel_info.id})")
+
+            chat_dir = output_dir / "chats" / f"chat_{channel_info.id}"
+            chat_dir.mkdir(parents=True, exist_ok=True)
+
+            console.print("  Fetching messages...")
+            try:
+                messages = await fetch_and_process_messages(
+                    client, channel_info, config, chat_dir
+                )
+            except Exception as e:
+                console.print(f"  [red]Failed to fetch: {e}[/red]")
+                continue
+
+            console.print(f"  [green]Fetched {len(messages)} messages[/green]")
+            renderer.render_channel(channel_info, messages, chat_dir)
+            renderer.save_channel_meta(channel_info, chat_dir)
+
+        renderer.render_index()
 
         console.print(f"\n[green bold]Export complete![/green bold]")
         console.print(f"  Output: {output_dir.resolve()}")
-        console.print(f"  Open: {(chat_dir / 'messages.html').resolve()}")
+        console.print(f"  Index:  {(output_dir / 'export_results.html').resolve()}")
 
         await client.disconnect()
 

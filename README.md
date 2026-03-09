@@ -81,6 +81,15 @@ tg-export export @channelname --last 24h --no-media
 
 # Custom output directory
 tg-export export @channelname --last 24h -o ./my-export
+
+# Multiple channels at once
+tg-export export @channel1 @channel2 @channel3 --last 24h
+
+# Multiple private channels
+tg-export export -c -100111 -c -100222 --last 7d
+
+# Mix of public and private
+tg-export export @public -c -100private --last 24h
 ```
 
 ### 4. View the export
@@ -120,14 +129,14 @@ Options:
 
 ### `tg-export export`
 
-Export messages from a channel to static HTML.
+Export messages from one or more channels to static HTML.
 
 ```
 Arguments:
-  CHANNEL              @username, invite link, or numeric ID
+  CHANNEL...             One or more @username, invite link, or numeric ID
 
 Options:
-  -c, --channel TEXT       Channel (alternative to positional arg, required for negative IDs)
+  -c, --channel TEXT       Channel (repeatable, required for negative IDs)
   -o, --output TEXT        Output directory (default: ./export)
   --last TEXT              Relative duration: 24h, 7d, 2w, 1m
   --from-date TEXT         Start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
