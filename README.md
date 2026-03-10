@@ -16,7 +16,7 @@ CLI tool that exports Telegram channel/group messages to a static HTML website, 
 
 ## Installation
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ### With pipx (recommended)
 
@@ -169,15 +169,56 @@ export/
         └── files/               # Downloaded documents
 ```
 
+## Configuration File
+
+Create a config file to set default channels and output directory:
+
+```bash
+tg-export config init
+```
+
+This creates `~/.tg-export/config.toml`:
+
+```toml
+# Default channels to export when none specified on the command line.
+# Accepts @usernames, invite links, or numeric IDs.
+channels = [
+    "@channel1",
+    "@channel2",
+    "-1001234567890",
+]
+
+# Default output directory (default: ./export)
+output = "./export"
+```
+
+With a config file, you can run exports without specifying channels:
+
+```bash
+tg-export export --last 24h        # exports all channels from config
+tg-export export @other --last 24h # overrides config channels
+```
+
+CLI flags always take precedence over the config file.
+
+### Config commands
+
+```bash
+tg-export config init    # Create default config file
+tg-export config show    # Show current config
+tg-export config path    # Print config file path
+```
+
+Use `--config /path/to/config.toml` on the export command to use an alternative config file.
+
 ## Environment Variables
 
 Instead of passing flags every time, you can set these:
 
 ```bash
-export TG_API_ID=12345678         # Custom API ID (optional)
-export TG_API_HASH="abcdef..."    # Custom API hash (optional)
-export TG_PHONE="+1234567890"     # Phone number
-export TG_SESSION_DIR="/path"     # Session directory
+export TG_EXPORT_API_ID=12345678         # Custom API ID (optional)
+export TG_EXPORT_API_HASH="abcdef..."    # Custom API hash (optional)
+export TG_EXPORT_PHONE="+1234567890"     # Phone number
 ```
 
 ## API Credentials
@@ -230,7 +271,7 @@ pytest tests/ -v
 ```
 
 Tests cover:
-- Config parsing (durations, dates, flag precedence)
+- Config parsing (durations, dates, flag precedence, TOML loading)
 - Text formatting (all entity types, nesting, XSS escaping)
 - Pagination (page splits, tdesktop filename convention, nav links)
 - Message grouping (join window, date separators, service messages)

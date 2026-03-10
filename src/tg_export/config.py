@@ -2,10 +2,37 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DEFAULT_SESSION_DIR = Path.home() / ".tg-export"
+DEFAULT_CONFIG_PATH = DEFAULT_SESSION_DIR / "config.toml"
+
+
+DEFAULT_CONFIG_CONTENT = """\
+# tg-export configuration file
+
+# Default channels to export when none specified on the command line.
+# Accepts @usernames, invite links, or numeric IDs.
+# channels = [
+#     "@channel1",
+#     "@channel2",
+#     "-1001234567890",
+# ]
+
+# Default output directory (default: ./export)
+# output = "./export"
+"""
+
+
+def load_config(config_path: str | None = None) -> dict:
+    """Load config from a TOML file. Returns empty dict if file doesn't exist."""
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    if not path.is_file():
+        return {}
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 def parse_duration(duration_str: str) -> timedelta:

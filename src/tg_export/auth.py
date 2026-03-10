@@ -30,8 +30,8 @@ _DEFAULT_API_HASH = "d524b414d21f4d37f08684c1df41ac9c"
 
 def get_api_credentials(api_id: int | None, api_hash: str | None) -> tuple[int, str]:
     """Resolve API credentials from args, env vars, or tdesktop defaults."""
-    resolved_id = api_id or os.environ.get("TG_API_ID") or _DEFAULT_API_ID
-    resolved_hash = api_hash or os.environ.get("TG_API_HASH") or _DEFAULT_API_HASH
+    resolved_id = api_id or os.environ.get("TG_EXPORT_API_ID") or _DEFAULT_API_ID
+    resolved_hash = api_hash or os.environ.get("TG_EXPORT_API_HASH") or _DEFAULT_API_HASH
     return int(resolved_id), str(resolved_hash)
 
 
@@ -53,7 +53,7 @@ async def authenticate(
     session_dir: str | None = None,
 ) -> TelegramClient:
     """Authenticate with Telegram and return a connected client."""
-    phone = phone or os.environ.get("TG_PHONE")
+    phone = phone or os.environ.get("TG_EXPORT_PHONE")
     client = await create_client(api_id, api_hash, session_dir)
     await client.connect()
 

@@ -1,9 +1,10 @@
 """Tests for configuration parsing."""
+import tomllib
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tg_export.config import compute_from_date, compute_to_date, parse_date, parse_duration
+from tg_export.config import compute_from_date, compute_to_date, load_config, parse_date, parse_duration
 
 
 class TestParseDuration:
@@ -91,3 +92,38 @@ class TestComputeToDate:
 
     def test_none(self):
         assert compute_to_date(None) is None
+
+
+class TestLoadConfig:
+    def test_load_valid_config(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            'channels = ["@channel1", "-1001234567890"]\n'
+            'output = "/tmp/export"\n'
+        )
+        cfg = load_config(str(config_file))
+        assert cfg["channels"] == ["@channel1", "-1001234567890"]
+        assert cfg["output"] == "/tmp/export"
+
+    def test_file_not_found(self, tmp_path):
+        cfg = load_config(str(tmp_path / "nonexistent.toml"))
+        assert cfg == {}
+
+    def test_partial_config(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('channels = ["@only_channels"]\n')
+        cfg = load_config(str(config_file))
+        assert cfg["channels"] == ["@only_channels"]
+        assert "output" not in cfg
+
+    def test_empty_config(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("")
+        cfg = load_config(str(config_file))
+        assert cfg == {}
+
+    def test_invalid_toml(self, tmp_path):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("this is not valid toml [[[")
+        with pytest.raises(tomllib.TOMLDecodeError):
+            load_config(str(config_file))

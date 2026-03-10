@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tg_export.auth import authenticate, connect_existing, get_api_credentials
-from tg_export.config import compute_from_date, compute_to_date
+from tg_export.config import DEFAULT_CONFIG_CONTENT, DEFAULT_CONFIG_PATH, compute_from_date, compute_to_date, load_config
 from tg_export.fetcher import entity_name, fetch_and_process_messages, get_channel_info, list_dialogs
 from tg_export.models import ExportConfig
 from tg_export.renderer import HtmlRenderer
@@ -24,9 +24,9 @@ def main():
 
 
 @main.command()
-@click.option("--api-id", type=int, default=None, help="Telegram API ID (or TG_API_ID env var)")
-@click.option("--api-hash", type=str, default=None, help="Telegram API hash (or TG_API_HASH env var)")
-@click.option("--phone", type=str, default=None, help="Phone number with country code (or TG_PHONE env var)")
+@click.option("--api-id", type=int, default=None, help="Telegram API ID (or TG_EXPORT_API_ID env var)")
+@click.option("--api-hash", type=str, default=None, help="Telegram API hash (or TG_EXPORT_API_HASH env var)")
+@click.option("--phone", type=str, default=None, help="Phone number with country code (or TG_EXPORT_PHONE env var)")
 @click.option("--session-dir", type=str, default=None, help="Directory for session file (default: ~/.tg-export/)")
 def auth(api_id, api_hash, phone, session_dir):
     """Authenticate with Telegram."""
@@ -76,10 +76,11 @@ def list_channels(api_id, api_hash, session_dir):
 @main.command()
 @click.argument("channels", nargs=-1)
 @click.option("-c", "--channel", "channel_opts", type=str, multiple=True, help="Channel (@username, invite link, or numeric ID). Repeatable.")
-@click.option("-o", "--output", type=str, default="./export", help="Output directory")
+@click.option("-o", "--output", type=str, default=None, help="Output directory (default: ./export)")
 @click.option("--api-id", type=int, default=None, help="Telegram API ID")
 @click.option("--api-hash", type=str, default=None, help="Telegram API hash")
 @click.option("--session-dir", type=str, default=None, help="Session directory")
+@click.option("--config", "config_path", type=str, default=None, help="Path to config file (default: ~/.tg-export/config.toml)")
 @click.option("--from-date", type=str, default=None, help="Start date (ISO format: YYYY-MM-DD)")
 @click.option("--to-date", type=str, default=None, help="End date (ISO format: YYYY-MM-DD)")
 @click.option("--last", type=str, default=None, help="Relative duration: 24h, 7d, 2w, 1m")
@@ -92,7 +93,7 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
 def export(
     channels, channel_opts, output, api_id, api_hash, session_dir,
-    from_date, to_date, last, limit, no_media, max_media_size,
+    config_path, from_date, to_date, last, limit, no_media, max_media_size,
     msgs_per_page, takeout, wait_time, verbose,
 ):
     """Export messages from Telegram channels to static HTML.
@@ -107,9 +108,16 @@ def export(
       tg-export export -c -100111 -c -100222 --last 7d
       tg-export export @public -c -100private --last 24h
     """
+    cfg = load_config(config_path)
+
     all_channels = list(channels) + list(channel_opts)
     if not all_channels:
-        raise click.UsageError("Provide at least one channel as argument or via -c flag.")
+        all_channels = [str(ch) for ch in cfg.get("channels", [])]
+    if not all_channels:
+        raise click.UsageError("Provide at least one channel as argument, via -c flag, or in config file.")
+
+    if output is None:
+        output = cfg.get("output", ExportConfig.output_dir)
     resolved_id, resolved_hash = get_api_credentials(api_id, api_hash)
 
     config = ExportConfig(
@@ -166,3 +174,41 @@ def export(
         await client.disconnect()
 
     asyncio.run(_export())
+
+
+@main.group()
+def config():
+    """Manage tg-export configuration."""
+    pass
+
+
+@config.command("init")
+def config_init():
+    """Create a default config file at ~/.tg-export/config.toml."""
+    path = DEFAULT_CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(path, "x") as f:
+            f.write(DEFAULT_CONFIG_CONTENT)
+    except FileExistsError:
+        console.print(f"Config file already exists: {path}")
+        return
+    console.print(f"Created config file: {path}")
+
+
+@config.command("show")
+def config_show():
+    """Show the current config file contents."""
+    path = DEFAULT_CONFIG_PATH
+    if not path.is_file():
+        console.print(f"No config file found at {path}")
+        console.print("Run 'tg-export config init' to create one.")
+        return
+    console.print(f"[bold]{path}[/bold]\n")
+    console.print(path.read_text())
+
+
+@config.command("path")
+def config_path():
+    """Print the config file path."""
+    console.print(str(DEFAULT_CONFIG_PATH))
