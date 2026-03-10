@@ -69,6 +69,11 @@ def parse_date(date_str: str) -> datetime:
 def compute_from_date(last: str | None, from_date: str | None) -> datetime | None:
     """Compute the from_date from --last or --from-date flags."""
     if last:
+        name = last.strip().lower()
+        if name == "today":
+            return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        if name == "yesterday":
+            return (datetime.now(timezone.utc) - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         delta = parse_duration(last)
         return datetime.now(timezone.utc) - delta
     if from_date:

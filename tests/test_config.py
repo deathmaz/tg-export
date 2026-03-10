@@ -84,6 +84,17 @@ class TestComputeFromDate:
     def test_both_none(self):
         assert compute_from_date(None, None) is None
 
+    def test_today(self):
+        result = compute_from_date("today", None)
+        now = datetime.now(timezone.utc)
+        assert result == now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def test_yesterday(self):
+        result = compute_from_date("yesterday", None)
+        now = datetime.now(timezone.utc)
+        expected = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        assert result == expected
+
 
 class TestComputeToDate:
     def test_with_date(self):

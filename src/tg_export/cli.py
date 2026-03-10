@@ -83,7 +83,7 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("--config", "config_path", type=str, default=None, help="Path to config file (default: ~/.tg-export/config.toml)")
 @click.option("--from-date", type=str, default=None, help="Start date (ISO format: YYYY-MM-DD)")
 @click.option("--to-date", type=str, default=None, help="End date (ISO format: YYYY-MM-DD)")
-@click.option("--last", type=str, default=None, help="Relative duration: 24h, 7d, 2w, 1m")
+@click.option("--last", type=str, default=None, help="Relative duration: today, yesterday, 24h, 7d, 2w, 1m")
 @click.option("--limit", type=int, default=None, help="Max number of messages per channel")
 @click.option("--no-media", is_flag=True, default=False, help="Skip media downloads")
 @click.option("--max-media-size", type=int, default=50, help="Max media file size in MB (default: 50)")

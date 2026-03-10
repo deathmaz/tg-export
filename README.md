@@ -67,6 +67,12 @@ Displays a table of all channels and groups you belong to, with their IDs.
 # By username
 tg-export export @channelname --last 24h
 
+# Today's messages only
+tg-export export @channelname --last today
+
+# Yesterday's messages onward
+tg-export export @channelname --last yesterday
+
 # By channel ID (use -c for negative IDs)
 tg-export export -c -100123456789 --last 7d
 
@@ -138,7 +144,7 @@ Arguments:
 Options:
   -c, --channel TEXT       Channel (repeatable, required for negative IDs)
   -o, --output TEXT        Output directory (default: ./export)
-  --last TEXT              Relative duration: 24h, 7d, 2w, 1m
+  --last TEXT              Relative duration: today, yesterday, 24h, 7d, 2w, 1m
   --from-date TEXT         Start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
   --to-date TEXT           End date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
   --limit INTEGER          Max number of messages to export
