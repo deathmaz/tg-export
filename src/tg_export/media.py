@@ -16,10 +16,21 @@ from telethon.tl.types import (
 )
 
 
+def _format_size(size_bytes: int) -> str:
+    """Format a byte count into a human-readable size string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
 def get_media_subdir(message) -> str | None:
     """Determine the subdirectory for a message's media, matching tdesktop conventions."""
     if message.photo:
         return "photos"
+    if message.gif:
+        return "video_files"
     if message.video:
         return "video_files"
     if message.voice:
@@ -134,6 +145,11 @@ def render_media_html(message, media_path: str | None) -> str:
                 f'</a>'
             )
         return _media_block("media_photo", "Photo", None)
+
+    if message.gif:
+        size = get_media_size(message)
+        size_str = f"\n{_format_size(size)}" if size else ""
+        return _media_block("media_video", "Animation" + size_str, media_path)
 
     if message.video or message.video_note:
         label = "Video message" if message.video_note else "Video"

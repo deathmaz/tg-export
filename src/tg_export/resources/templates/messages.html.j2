@@ -54,7 +54,7 @@
 {% endif %}
 {% if item.message.reply_to_id %}
       <div class="reply_to details">
-       <a href="#message{{ item.message.reply_to_id }}">In reply to this message</a>
+       <a href="#go_to_message{{ item.message.reply_to_id }}" onclick="return GoToMessage({{ item.message.reply_to_id }})">In reply to this message</a>
       </div>
 {% endif %}
 {% if item.message.media_html %}
@@ -73,7 +73,7 @@
 {% if item.message.reactions %}
       <span class="reactions">
 {% for reaction in item.message.reactions %}
-       <span class="reaction"><span class="emoji">{{ reaction.emoji }}</span> <span class="count">{{ reaction.count }}</span></span>
+       <span class="reaction"><span class="emoji">{{ reaction.emoji }}</span>{% for reactor in reaction.reactors %} <span class="userpic {{ reactor.color_class }}" title="{{ reactor.name }}"><span class="initials">{{ reactor.initials }}</span></span>{% endfor %} <span class="count">{{ reaction.count }}</span></span>
 {% endfor %}
       </span>
 {% endif %}

@@ -16,19 +16,19 @@ import jinja2
 console = Console()
 
 # Telegram Desktop assigns userpic colors based on user ID
-_COLOR_CLASSES = ["userpic1", "userpic2", "userpic3", "userpic4", "userpic5", "userpic6", "userpic7", "userpic8"]
+USERPIC_COLORS = ["userpic1", "userpic2", "userpic3", "userpic4", "userpic5", "userpic6", "userpic7", "userpic8"]
 
 # Time window for grouping consecutive messages from the same sender
 _GROUP_WINDOW = timedelta(seconds=60)
 
 
-def _userpic_color(user_id: int | None) -> str:
+def userpic_color(user_id: int | None) -> str:
     if user_id is None:
-        return _COLOR_CLASSES[0]
-    return _COLOR_CLASSES[user_id % len(_COLOR_CLASSES)]
+        return USERPIC_COLORS[0]
+    return USERPIC_COLORS[user_id % len(USERPIC_COLORS)]
 
 
-def _get_initials(name: str) -> str:
+def get_initials(name: str) -> str:
     parts = name.split()
     if len(parts) >= 2:
         return (parts[0][0] + parts[-1][0]).upper()
@@ -147,8 +147,8 @@ class HtmlRenderer:
             group = MessageGroup(
                 message=msg,
                 joined=joined,
-                initials=_get_initials(msg.sender_name) if not joined else "",
-                userpic_color_class=_userpic_color(msg.sender_id) if not joined else "",
+                initials=get_initials(msg.sender_name) if not joined else "",
+                userpic_color_class=userpic_color(msg.sender_id) if not joined else "",
             )
             result.append(group)
             prev_msg = msg

@@ -6,9 +6,17 @@ from datetime import datetime
 
 
 @dataclass
+class Reactor:
+    name: str
+    initials: str
+    color_class: str
+
+
+@dataclass
 class Reaction:
     emoji: str
     count: int
+    reactors: list[Reactor] = field(default_factory=list)
 
 
 @dataclass

@@ -14,7 +14,8 @@ from telethon.tl.types import Channel, Chat, User
 
 from tg_export.formatters import format_message_text
 from tg_export.media import download_media, render_media_html
-from tg_export.models import ChannelInfo, ExportConfig, ExportedMessage, Reaction
+from tg_export.models import ChannelInfo, ExportConfig, ExportedMessage, Reaction, Reactor
+from tg_export.renderer import get_initials, userpic_color
 
 console = Console()
 
@@ -85,10 +86,40 @@ async def _takeout_or_client(client: TelegramClient, config: ExportConfig):
         yield client
 
 
-def _extract_reactions(message) -> list[Reaction]:
-    """Extract reactions from a message."""
+async def _extract_reactions(client, message, sender_cache: dict[int, str]) -> list[Reaction]:
+    """Extract reactions from a message, including recent reactor info."""
     if not hasattr(message, "reactions") or not message.reactions:
         return []
+
+    # Build a map: reaction emoji -> list of reactor names from recent_reactions
+    reactor_map: dict[str, list[Reactor]] = {}
+    recent = getattr(message.reactions, "recent_reactions", None) or []
+    for rr in recent:
+        peer_id = getattr(rr, "peer_id", None)
+        if not peer_id:
+            continue
+        uid = getattr(peer_id, "user_id", None)
+        if not uid:
+            continue
+        # Resolve name via cache or API
+        if uid in sender_cache:
+            name = sender_cache[uid]
+        else:
+            try:
+                entity = await client.get_entity(uid)
+                name = entity_name(entity)
+            except Exception:
+                name = "User"
+            sender_cache[uid] = name
+        reaction = rr.reaction
+        emoji_key = getattr(reaction, "emoticon", None) or "custom"
+        reactors = reactor_map.setdefault(emoji_key, [])
+        reactors.append(Reactor(
+            name=name,
+            initials=get_initials(name),
+            color_class=userpic_color(uid),
+        ))
+
     reactions = []
     for r in message.reactions.results:
         emoji = ""
@@ -96,7 +127,8 @@ def _extract_reactions(message) -> list[Reaction]:
             emoji = r.reaction.emoticon
         elif hasattr(r.reaction, "document_id"):
             emoji = "custom"
-        reactions.append(Reaction(emoji=emoji, count=r.count))
+        reactors = reactor_map.get(emoji, [])
+        reactions.append(Reaction(emoji=emoji, count=r.count, reactors=reactors))
     return reactions
 
 
@@ -230,7 +262,7 @@ async def fetch_and_process_messages(
                     media_html=media_html,
                     reply_to_id=getattr(message.reply_to, "reply_to_msg_id", None) if message.reply_to else None,
                     forwarded_from=_extract_forward_from(message),
-                    reactions=_extract_reactions(message),
+                    reactions=await _extract_reactions(client, message, sender_cache),
                     views=message.views,
                     signature=message.post_author,
                 )

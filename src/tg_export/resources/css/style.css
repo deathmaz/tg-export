@@ -608,7 +608,8 @@ div.toast_shown {
 
 .reactions .reaction {
     display: inline-flex;
-    height: 20px;
+    align-items: center;
+    height: 28px;
     border-radius: 15px;
     background-color: #e8f5fc;
     color: #168acd;
@@ -632,26 +633,35 @@ div.toast_shown {
 }
 
 .reactions .reaction .emoji {
-    line-height: 20px;
+    line-height: 28px;
     margin: 0 5px;
     font-size: 15px;
 }
 
-.reactions .reaction .userpic:not(:first-child) {
+.reactions .reaction .userpic + .userpic {
     margin-left: -8px;
 }
 
 .reactions .reaction .userpic {
     display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 2px 0;
 }
 
 .reactions .reaction .userpic .initials {
-    font-size: 8px;
+    font-size: 9px;
+    line-height: 24px;
+    text-align: center;
+    color: #fff;
+    display: block;
 }
 
 .reactions .reaction .count {
     margin-right: 8px;
-    line-height: 20px;
+    line-height: 28px;
 }
 
 @media (prefers-color-scheme: dark) {
