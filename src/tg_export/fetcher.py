@@ -86,31 +86,47 @@ async def _takeout_or_client(client: TelegramClient, config: ExportConfig):
         yield client
 
 
+def _peer_uid(peer) -> int | None:
+    """Extract a numeric id from a Telethon Peer (user/channel/chat)."""
+    return (
+        getattr(peer, "user_id", None)
+        or getattr(peer, "channel_id", None)
+        or getattr(peer, "chat_id", None)
+    )
+
+
+async def _resolve_peer_name(
+    client, peer, sender_cache: dict[int, str], fallback: str
+) -> tuple[int | None, str | None]:
+    """Resolve a peer to (uid, display_name), caching the name. None if uid missing."""
+    uid = _peer_uid(peer)
+    if uid is None:
+        return None, None
+    if uid in sender_cache:
+        return uid, sender_cache[uid]
+    try:
+        ent = await client.get_entity(peer)
+        name = entity_name(ent)
+    except Exception:
+        name = fallback
+    sender_cache[uid] = name
+    return uid, name
+
+
 async def _extract_reactions(client, message, sender_cache: dict[int, str]) -> list[Reaction]:
     """Extract reactions from a message, including recent reactor info."""
     if not hasattr(message, "reactions") or not message.reactions:
         return []
 
-    # Build a map: reaction emoji -> list of reactor names from recent_reactions
     reactor_map: dict[str, list[Reactor]] = {}
     recent = getattr(message.reactions, "recent_reactions", None) or []
     for rr in recent:
         peer_id = getattr(rr, "peer_id", None)
         if not peer_id:
             continue
-        uid = getattr(peer_id, "user_id", None)
-        if not uid:
+        uid, name = await _resolve_peer_name(client, peer_id, sender_cache, "User")
+        if uid is None:
             continue
-        # Resolve name via cache or API
-        if uid in sender_cache:
-            name = sender_cache[uid]
-        else:
-            try:
-                entity = await client.get_entity(uid)
-                name = entity_name(entity)
-            except Exception:
-                name = "User"
-            sender_cache[uid] = name
         reaction = rr.reaction
         emoji_key = getattr(reaction, "emoticon", None) or "custom"
         reactors = reactor_map.setdefault(emoji_key, [])
@@ -132,14 +148,17 @@ async def _extract_reactions(client, message, sender_cache: dict[int, str]) -> l
     return reactions
 
 
-def _extract_forward_from(message) -> str | None:
-    """Extract the forwarded-from info."""
+async def _extract_forward_from(client, message, sender_cache: dict[int, str]) -> str | None:
+    """Extract the forwarded-from sender name, resolving from_id when from_name absent."""
     fwd = message.fwd_from
     if not fwd:
         return None
     if fwd.from_name:
         return fwd.from_name
-    return "Forwarded"
+    if fwd.from_id is None:
+        return None
+    _, name = await _resolve_peer_name(client, fwd.from_id, sender_cache, "Deleted Account")
+    return name
 
 
 def _get_service_text(message) -> str:
@@ -239,7 +258,7 @@ async def fetch_and_process_messages(
                         sender_name = entity_name(sender)
                         sender_cache[sender_id] = sender_name
 
-                text_html = format_message_text(message.text or "", message.entities)
+                text_html = format_message_text(message.raw_text or "", message.entities)
 
                 # Download media
                 media_path = None
@@ -249,6 +268,12 @@ async def fetch_and_process_messages(
                     )
 
                 media_html = render_media_html(message, media_path)
+
+                fwd_date_full = None
+                fwd_date_short = None
+                if message.fwd_from and message.fwd_from.date:
+                    fwd_date_full = _format_date_full(message.fwd_from.date)
+                    fwd_date_short = _format_date_short(message.fwd_from.date)
 
                 exported = ExportedMessage(
                     id=message.id,
@@ -261,7 +286,9 @@ async def fetch_and_process_messages(
                     media_path=media_path,
                     media_html=media_html,
                     reply_to_id=getattr(message.reply_to, "reply_to_msg_id", None) if message.reply_to else None,
-                    forwarded_from=_extract_forward_from(message),
+                    forwarded_from=await _extract_forward_from(client, message, sender_cache),
+                    forwarded_date_full=fwd_date_full,
+                    forwarded_date_short=fwd_date_short,
                     reactions=await _extract_reactions(client, message, sender_cache),
                     views=message.views,
                     signature=message.post_author,

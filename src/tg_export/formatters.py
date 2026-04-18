@@ -5,14 +5,19 @@ import html
 from dataclasses import dataclass, field
 
 from telethon.tl.types import (
+    MessageEntityBankCard,
     MessageEntityBlockquote,
     MessageEntityBold,
+    MessageEntityBotCommand,
+    MessageEntityCashtag,
     MessageEntityCode,
     MessageEntityCustomEmoji,
+    MessageEntityEmail,
     MessageEntityHashtag,
     MessageEntityItalic,
     MessageEntityMention,
     MessageEntityMentionName,
+    MessageEntityPhone,
     MessageEntityPre,
     MessageEntitySpoiler,
     MessageEntityStrike,
@@ -39,26 +44,60 @@ def format_message_text(text: str, entities: list | None) -> str:
     if not entities:
         return _text_to_html(text)
 
-    # Build a tree of entities to handle overlapping ranges
-    root = _Node(start=0, end=len(text))
-    sorted_entities = sorted(entities, key=lambda e: (e.offset, -e.length))
+    # Telegram entity offsets/lengths are UTF-16 code units; Python str is code
+    # points. Translate via a prebuilt index so supplementary-plane chars
+    # (emoji, etc.) don't misalign entity boundaries. Skip when text is BMP-only.
+    translate = _make_u16_translator(text)
 
-    for entity in sorted_entities:
-        _insert_entity(root, entity)
+    root = _Node(start=0, end=len(text))
+    translated = [
+        (e, translate(e.offset), translate(e.offset + e.length)) for e in entities
+    ]
+    translated.sort(key=lambda t: (t[1], -(t[2] - t[1])))
+
+    for entity, py_start, py_end in translated:
+        _insert_entity_range(root, entity, py_start, py_end)
 
     return _render_node(root, text)
 
 
-def _insert_entity(parent: _Node, entity: object) -> None:
-    """Insert an entity into the tree, handling nesting."""
-    e_start = entity.offset
-    e_end = entity.offset + entity.length
+def _make_u16_translator(text: str):
+    """Return fn mapping UTF-16 unit offset → Python char index for `text`."""
+    text_len = len(text)
+    if not any(ord(ch) > 0xFFFF for ch in text):
+        def translate_bmp(u16_pos: int) -> int:
+            if u16_pos <= 0:
+                return 0
+            if u16_pos >= text_len:
+                return text_len
+            return u16_pos
+        return translate_bmp
+
+    idx: list[int] = []
+    for i, ch in enumerate(text):
+        idx.append(i)
+        if ord(ch) > 0xFFFF:
+            idx.append(i)
+    idx.append(text_len)
+    idx_len = len(idx)
+
+    def translate(u16_pos: int) -> int:
+        if u16_pos <= 0:
+            return 0
+        if u16_pos >= idx_len:
+            return text_len
+        return idx[u16_pos]
+    return translate
+
+
+def _insert_entity_range(parent: _Node, entity: object, e_start: int, e_end: int) -> None:
+    """Insert an entity into the tree at already-translated Python char indices."""
     node = _Node(start=e_start, end=e_end, entity=entity)
 
     # Try to insert into an existing child
     for child in parent.children:
         if child.start <= e_start and child.end >= e_end:
-            _insert_entity(child, entity)
+            _insert_entity_range(child, entity, e_start, e_end)
             return
 
     # Insert at this level, potentially adopting existing children
@@ -132,14 +171,30 @@ def _wrap_entity(entity: object, inner_html: str, raw_text: str) -> str:
             return f'<a href="https://t.me/{html.escape(username)}">{inner_html}</a>'
         case MessageEntityMentionName():
             return f'<a href="tg://user?id={entity.user_id}">{inner_html}</a>'
+        case MessageEntityEmail():
+            return f'<a href="mailto:{html.escape(raw_text, quote=True)}">{inner_html}</a>'
+        case MessageEntityPhone():
+            return f'<a href="tel:{html.escape(raw_text, quote=True)}">{inner_html}</a>'
         case MessageEntityHashtag():
+            return f'<a href="" onclick="return ShowHashtag({_js_str(raw_text)})">{inner_html}</a>'
+        case MessageEntityCashtag():
+            return f'<a href="" onclick="return ShowCashtag({_js_str(raw_text)})">{inner_html}</a>'
+        case MessageEntityBotCommand():
+            return f'<a href="" onclick="return ShowBotCommand({_js_str(raw_text)})">{inner_html}</a>'
+        case MessageEntityBankCard():
             return inner_html
         case MessageEntitySpoiler():
-            return f'<span class="spoiler hidden" onclick="ShowSpoiler(this)">{inner_html}</span>'
+            return f'<span class="spoiler hidden" onclick="ShowSpoiler(this)"><span aria-hidden="true">{inner_html}</span></span>'
         case MessageEntityCustomEmoji():
             return inner_html
         case _:
             return inner_html
+
+
+def _js_str(s: str) -> str:
+    """Escape a string for use inside a JS single-quoted literal in an HTML attribute."""
+    escaped = s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")
+    return "'" + html.escape(escaped, quote=True) + "'"
 
 
 def _text_to_html(text: str) -> str:

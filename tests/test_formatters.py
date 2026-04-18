@@ -2,12 +2,18 @@
 from tg_export.formatters import format_message_text
 
 from telethon.tl.types import (
+    MessageEntityBankCard,
     MessageEntityBold,
     MessageEntityBlockquote,
+    MessageEntityBotCommand,
+    MessageEntityCashtag,
     MessageEntityCode,
+    MessageEntityEmail,
+    MessageEntityHashtag,
     MessageEntityItalic,
     MessageEntityMention,
     MessageEntityMentionName,
+    MessageEntityPhone,
     MessageEntityPre,
     MessageEntitySpoiler,
     MessageEntityStrike,
@@ -115,6 +121,39 @@ class TestFormatSingleEntity:
         result = format_message_text("John", entities)
         assert 'href="tg://user?id=12345"' in result
 
+    def test_email(self):
+        entities = [MessageEntityEmail(offset=0, length=15)]
+        result = format_message_text("foo@example.com", entities)
+        assert result == '<a href="mailto:foo@example.com">foo@example.com</a>'
+
+    def test_phone(self):
+        entities = [MessageEntityPhone(offset=0, length=12)]
+        result = format_message_text("+14155552671", entities)
+        assert result == '<a href="tel:+14155552671">+14155552671</a>'
+
+    def test_hashtag(self):
+        entities = [MessageEntityHashtag(offset=0, length=5)]
+        result = format_message_text("#news", entities)
+        assert "ShowHashtag('#news')" in result
+        assert ">#news</a>" in result
+
+    def test_cashtag(self):
+        entities = [MessageEntityCashtag(offset=0, length=4)]
+        result = format_message_text("$TSL", entities)
+        assert "ShowCashtag" in result
+        assert ">$TSL</a>" in result
+
+    def test_bot_command(self):
+        entities = [MessageEntityBotCommand(offset=0, length=6)]
+        result = format_message_text("/start", entities)
+        assert "ShowBotCommand" in result
+        assert ">/start</a>" in result
+
+    def test_bank_card(self):
+        entities = [MessageEntityBankCard(offset=0, length=16)]
+        result = format_message_text("4111111111111111", entities)
+        assert result == "4111111111111111"
+
 
 class TestFormatMultipleEntities:
     def test_two_separate_entities(self):
@@ -200,3 +239,24 @@ class TestFormatEdgeCases:
         entities = [MessageEntityBold(offset=3, length=2)]
         result = format_message_text(text, entities)
         assert "<strong>" in result
+
+    def test_utf16_offset_after_emoji(self):
+        # UTF-16: "🎉" = 2 units, " there" starts at unit 2. Python chars: "🎉"=1, " there" starts at 1.
+        text = "🎉 there"
+        entities = [MessageEntityBold(offset=3, length=5)]
+        result = format_message_text(text, entities)
+        assert result == "🎉 <strong>there</strong>"
+
+    def test_utf16_entity_spans_emoji(self):
+        # Bold covers the emoji: UTF-16 offset=0, length=2 (just the emoji)
+        text = "🎉x"
+        entities = [MessageEntityBold(offset=0, length=2)]
+        result = format_message_text(text, entities)
+        assert result == "<strong>🎉</strong>x"
+
+    def test_utf16_mixed_bmp_and_emoji(self):
+        # "Hi 🎉 bold" — bold on "bold" at UTF-16 offset=6, length=4
+        text = "Hi 🎉 bold"
+        entities = [MessageEntityBold(offset=6, length=4)]
+        result = format_message_text(text, entities)
+        assert result == "Hi 🎉 <strong>bold</strong>"

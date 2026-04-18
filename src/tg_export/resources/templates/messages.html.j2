@@ -49,7 +49,9 @@
 {% endif %}
 {% if item.message.forwarded_from %}
       <div class="forwarded body">
-       Forwarded from {{ item.message.forwarded_from }}
+       <div class="from_name">
+        {{ item.message.forwarded_from }}{% if item.message.forwarded_date_full %}<span class="date details" title="{{ item.message.forwarded_date_full }}"> {{ item.message.forwarded_date_short }}</span>{% endif %}
+       </div>
       </div>
 {% endif %}
 {% if item.message.reply_to_id %}

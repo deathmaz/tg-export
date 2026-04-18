@@ -32,6 +32,8 @@ class ExportedMessage:
     media_html: str = ""
     reply_to_id: int | None = None
     forwarded_from: str | None = None
+    forwarded_date_full: str | None = None
+    forwarded_date_short: str | None = None
     is_service: bool = False
     service_text: str | None = None
     reactions: list[Reaction] = field(default_factory=list)
