@@ -8,6 +8,8 @@ from pathlib import Path
 
 DEFAULT_SESSION_DIR = Path.home() / ".tg-export"
 DEFAULT_CONFIG_PATH = DEFAULT_SESSION_DIR / "config.toml"
+DEFAULT_CHECKPOINT_PATH = DEFAULT_SESSION_DIR / "checkpoint.toml"
+CHECKPOINT_KEY = "last_export"
 
 
 DEFAULT_CONFIG_CONTENT = """\
@@ -86,3 +88,39 @@ def compute_to_date(to_date: str | None) -> datetime | None:
     if to_date:
         return parse_date(to_date)
     return None
+
+
+def load_checkpoint(path: Path | None = None) -> datetime | None:
+    """Load the stored export checkpoint datetime, or None if not set."""
+    cp_path = path or DEFAULT_CHECKPOINT_PATH
+    try:
+        with open(cp_path, "rb") as f:
+            data = tomllib.load(f)
+    except FileNotFoundError:
+        return None
+    value = data.get(CHECKPOINT_KEY)
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def save_checkpoint(dt: datetime, path: Path | None = None) -> None:
+    """Persist the given datetime as the export checkpoint."""
+    cp_path = path or DEFAULT_CHECKPOINT_PATH
+    cp_path.parent.mkdir(parents=True, exist_ok=True)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    cp_path.write_text(f'{CHECKPOINT_KEY} = "{dt.isoformat()}"\n')
+
+
+def clear_checkpoint(path: Path | None = None) -> bool:
+    """Delete the checkpoint file if present. Returns True if something was removed."""
+    cp_path = path or DEFAULT_CHECKPOINT_PATH
+    try:
+        cp_path.unlink()
+        return True
+    except FileNotFoundError:
+        return False

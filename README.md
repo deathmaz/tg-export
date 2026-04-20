@@ -8,6 +8,7 @@ CLI tool that exports Telegram channel/group messages to a static HTML website, 
 - Exports from private channels and groups (you must be a member)
 - Downloads media: photos, videos, voice messages, documents, stickers
 - Relative time filters (`--last 24h`) and date range filters
+- Incremental exports via `--save-checkpoint` / `--from-checkpoint`
 - Paginated output (~1000 messages per page)
 - Uses Telegram's takeout API for faster exports with lower rate limits
 - Stays invisible — sets your status to offline while running
@@ -88,6 +89,10 @@ tg-export export @channelname --last 24h --no-media
 # Custom output directory
 tg-export export @channelname --last 24h -o ./my-export
 
+# Incremental exports (resume from the last run)
+tg-export export @channelname --last 7d --save-checkpoint   # first run
+tg-export export @channelname --from-checkpoint --save-checkpoint   # next runs
+
 # Multiple channels at once
 tg-export export @channel1 @channel2 @channel3 --last 24h
 
@@ -147,6 +152,8 @@ Options:
   --last TEXT              Relative duration: today, yesterday, 24h, 7d, 2w, 1m
   --from-date TEXT         Start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
   --to-date TEXT           End date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+  --from-checkpoint        Use the stored checkpoint as --from-date
+  --save-checkpoint        Store current time as checkpoint after success
   --limit INTEGER          Max number of messages to export
   --no-media               Skip downloading media files
   --max-media-size INT     Max media file size in MB (default: 50)
@@ -216,6 +223,30 @@ tg-export config path    # Print config file path
 ```
 
 Use `--config /path/to/config.toml` on the export command to use an alternative config file.
+
+## Incremental Exports (Checkpoint)
+
+For recurring exports you can persist the time of the last successful run and resume from it next time, instead of picking a date manually.
+
+```bash
+# First run: export the last week AND save a checkpoint on success
+tg-export export @channel --last 7d --save-checkpoint
+
+# Later runs: start from the stored checkpoint, then advance it
+tg-export export @channel --from-checkpoint --save-checkpoint
+```
+
+`--save-checkpoint` captures `datetime.now(UTC)` **after** the export finishes successfully and writes it to `~/.tg-export/checkpoint.toml`. A failed run leaves the previous checkpoint intact.
+
+`--from-checkpoint` is mutually exclusive with `--from-date` and `--last`. If no checkpoint is stored yet, the command errors out and tells you to run with `--save-checkpoint` first.
+
+### Checkpoint commands
+
+```bash
+tg-export checkpoint show    # Print the stored datetime (or "No checkpoint set.")
+tg-export checkpoint clear   # Delete the checkpoint file
+tg-export checkpoint path    # Print the checkpoint file path
+```
 
 ## Environment Variables
 

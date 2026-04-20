@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -9,7 +10,18 @@ from rich.console import Console
 from rich.table import Table
 
 from tg_export.auth import authenticate, connect_existing, get_api_credentials
-from tg_export.config import DEFAULT_CONFIG_CONTENT, DEFAULT_CONFIG_PATH, compute_from_date, compute_to_date, load_config
+from tg_export.config import (
+    CHECKPOINT_KEY,
+    DEFAULT_CHECKPOINT_PATH,
+    DEFAULT_CONFIG_CONTENT,
+    DEFAULT_CONFIG_PATH,
+    clear_checkpoint,
+    compute_from_date,
+    compute_to_date,
+    load_checkpoint,
+    load_config,
+    save_checkpoint,
+)
 from tg_export.fetcher import entity_name, fetch_and_process_messages, get_channel_info, list_dialogs
 from tg_export.models import ExportConfig
 from tg_export.renderer import HtmlRenderer
@@ -84,6 +96,8 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("--from-date", type=str, default=None, help="Start date (ISO format: YYYY-MM-DD)")
 @click.option("--to-date", type=str, default=None, help="End date (ISO format: YYYY-MM-DD)")
 @click.option("--last", type=str, default=None, help="Relative duration: today, yesterday, 24h, 7d, 2w, 1m")
+@click.option("--from-checkpoint", "use_checkpoint", is_flag=True, default=False, help="Use stored checkpoint as --from-date (set by --save-checkpoint)")
+@click.option("--save-checkpoint", "write_checkpoint", is_flag=True, default=False, help="After a successful export, store the current time as a checkpoint for future --from-checkpoint runs")
 @click.option("--limit", type=int, default=None, help="Max number of messages per channel")
 @click.option("--no-media", is_flag=True, default=False, help="Skip media downloads")
 @click.option("--max-media-size", type=int, default=50, help="Max media file size in MB (default: 50)")
@@ -93,8 +107,8 @@ def list_channels(api_id, api_hash, session_dir):
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
 def export(
     channels, channel_opts, output, api_id, api_hash, session_dir,
-    config_path, from_date, to_date, last, limit, no_media, max_media_size,
-    msgs_per_page, takeout, wait_time, verbose,
+    config_path, from_date, to_date, last, use_checkpoint, write_checkpoint,
+    limit, no_media, max_media_size, msgs_per_page, takeout, wait_time, verbose,
 ):
     """Export messages from Telegram channels to static HTML.
 
@@ -120,9 +134,18 @@ def export(
         output = cfg.get("output", ExportConfig.output_dir)
     resolved_id, resolved_hash = get_api_credentials(api_id, api_hash)
 
+    if use_checkpoint:
+        if from_date or last:
+            raise click.UsageError("--from-checkpoint cannot be combined with --from-date or --last.")
+        resolved_from = load_checkpoint()
+        if resolved_from is None:
+            raise click.UsageError("No checkpoint stored. Run an export with --save-checkpoint first.")
+    else:
+        resolved_from = compute_from_date(last, from_date)
+
     config = ExportConfig(
         output_dir=output,
-        from_date=compute_from_date(last, from_date),
+        from_date=resolved_from,
         to_date=compute_to_date(to_date),
         limit=limit,
         download_media=not no_media,
@@ -173,6 +196,11 @@ def export(
 
         await client.disconnect()
 
+        if write_checkpoint:
+            finished_at = datetime.now(timezone.utc)
+            save_checkpoint(finished_at)
+            console.print(f"  Checkpoint: {finished_at.isoformat()} → {DEFAULT_CHECKPOINT_PATH}")
+
     asyncio.run(_export())
 
 
@@ -212,3 +240,38 @@ def config_show():
 def config_path():
     """Print the config file path."""
     console.print(str(DEFAULT_CONFIG_PATH))
+
+
+@main.group()
+def checkpoint():
+    """Manage the export checkpoint (stored datetime of last --save-checkpoint run)."""
+    pass
+
+
+@checkpoint.command("show")
+def checkpoint_show():
+    """Show the stored checkpoint datetime."""
+    path = DEFAULT_CHECKPOINT_PATH
+    dt = load_checkpoint()
+    if dt is None:
+        console.print("No checkpoint set.")
+        console.print(f"  Path: {path}")
+        return
+    console.print(f"[bold]{path}[/bold]")
+    console.print(f"{CHECKPOINT_KEY} = {dt.isoformat()}")
+
+
+@checkpoint.command("clear")
+def checkpoint_clear():
+    """Delete the stored checkpoint."""
+    path = DEFAULT_CHECKPOINT_PATH
+    if clear_checkpoint():
+        console.print(f"Cleared checkpoint: {path}")
+    else:
+        console.print(f"No checkpoint to clear ({path} does not exist).")
+
+
+@checkpoint.command("path")
+def checkpoint_path():
+    """Print the checkpoint file path."""
+    console.print(str(DEFAULT_CHECKPOINT_PATH))

@@ -4,7 +4,16 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tg_export.config import compute_from_date, compute_to_date, load_config, parse_date, parse_duration
+from tg_export.config import (
+    clear_checkpoint,
+    compute_from_date,
+    compute_to_date,
+    load_checkpoint,
+    load_config,
+    parse_date,
+    parse_duration,
+    save_checkpoint,
+)
 
 
 class TestParseDuration:
@@ -138,3 +147,44 @@ class TestLoadConfig:
         config_file.write_text("this is not valid toml [[[")
         with pytest.raises(tomllib.TOMLDecodeError):
             load_config(str(config_file))
+
+
+class TestCheckpoint:
+    def test_save_and_load_roundtrip(self, tmp_path):
+        cp = tmp_path / "checkpoint.toml"
+        dt = datetime(2026, 4, 20, 17, 42, 3, tzinfo=timezone.utc)
+        save_checkpoint(dt, path=cp)
+        assert cp.is_file()
+        assert load_checkpoint(path=cp) == dt
+
+    def test_load_missing_returns_none(self, tmp_path):
+        cp = tmp_path / "nope.toml"
+        assert load_checkpoint(path=cp) is None
+
+    def test_load_empty_key_returns_none(self, tmp_path):
+        cp = tmp_path / "checkpoint.toml"
+        cp.write_text("")
+        assert load_checkpoint(path=cp) is None
+
+    def test_save_creates_parent_dir(self, tmp_path):
+        cp = tmp_path / "nested" / "dir" / "checkpoint.toml"
+        dt = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        save_checkpoint(dt, path=cp)
+        assert cp.is_file()
+
+    def test_save_naive_datetime_assumed_utc(self, tmp_path):
+        cp = tmp_path / "checkpoint.toml"
+        naive = datetime(2026, 4, 20, 12, 0, 0)
+        save_checkpoint(naive, path=cp)
+        loaded = load_checkpoint(path=cp)
+        assert loaded == naive.replace(tzinfo=timezone.utc)
+
+    def test_clear_removes_file(self, tmp_path):
+        cp = tmp_path / "checkpoint.toml"
+        save_checkpoint(datetime(2026, 1, 1, tzinfo=timezone.utc), path=cp)
+        assert clear_checkpoint(path=cp) is True
+        assert not cp.exists()
+
+    def test_clear_missing_is_noop(self, tmp_path):
+        cp = tmp_path / "nope.toml"
+        assert clear_checkpoint(path=cp) is False
