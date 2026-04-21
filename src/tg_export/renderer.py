@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 
 from rich.console import Console
 
+from tg_export.config import resolve_tz
 from tg_export.models import ChannelInfo, ExportConfig, ExportedMessage, MessageGroup
 from tg_export.pagination import build_page_info, paginate_messages
 
@@ -35,15 +36,38 @@ def get_initials(name: str) -> str:
     return name[0].upper() if name else "?"
 
 
+def format_utc_offset(dt: datetime) -> str:
+    """Format a tz-aware datetime's UTC offset as 'UTC+HH:MM' or 'UTC-HH:MM'."""
+    offset = dt.utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    total_minutes = abs(total_minutes)
+    return f"UTC{sign}{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
 class HtmlRenderer:
-    def __init__(self, output_dir: Path, config: ExportConfig):
+    def __init__(self, output_dir: Path, config: ExportConfig, tz: tzinfo | None = None):
         self.output_dir = output_dir
         self.config = config
+        self.tz = tz if tz is not None else resolve_tz(config.timezone)
         self._resources_dir = Path(__file__).parent / "resources"
         self.env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(str(self._resources_dir / "templates")),
             autoescape=False,
         )
+        self.env.filters["date_full"] = self._filter_date_full
+        self.env.filters["date_short"] = self._filter_date_short
+
+    def _filter_date_full(self, dt: datetime | None) -> str:
+        if dt is None:
+            return ""
+        local = dt.astimezone(self.tz)
+        return local.strftime("%d.%m.%Y %H:%M:%S ") + format_utc_offset(local)
+
+    def _filter_date_short(self, dt: datetime | None) -> str:
+        if dt is None:
+            return ""
+        return dt.astimezone(self.tz).strftime("%H:%M")
 
     def copy_static_assets(self) -> None:
         """Copy CSS, JS, and images to the output directory."""
@@ -120,8 +144,8 @@ class HtmlRenderer:
         prev_date_str: str | None = None
 
         for msg in messages:
-            # Insert date separator if the date changed
-            date_str = msg.date.strftime("%B %d, %Y")
+            # Insert date separator if the date changed (in configured timezone)
+            date_str = msg.date.astimezone(self.tz).strftime("%B %d, %Y")
             if date_str != prev_date_str:
                 result.append({"type": "date_separator", "date": date_str})
                 prev_date_str = date_str

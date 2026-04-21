@@ -22,9 +22,7 @@ class Reaction:
 @dataclass
 class ExportedMessage:
     id: int
-    date: datetime
-    date_full: str  # "DD.MM.YYYY HH:MM:SS UTC+HH:MM"
-    date_short: str  # "HH:MM"
+    date: datetime  # UTC-aware; renderer converts to configured timezone for display
     sender_name: str
     sender_id: int | None
     text_html: str
@@ -32,8 +30,7 @@ class ExportedMessage:
     media_html: str = ""
     reply_to_id: int | None = None
     forwarded_from: str | None = None
-    forwarded_date_full: str | None = None
-    forwarded_date_short: str | None = None
+    forwarded_date: datetime | None = None  # UTC-aware
     is_service: bool = False
     service_text: str | None = None
     reactions: list[Reaction] = field(default_factory=list)
@@ -80,3 +77,4 @@ class ExportConfig:
     msgs_per_page: int = 1000
     use_takeout: bool = True
     wait_time: float | None = None  # None = auto (0 with takeout, 2 without)
+    timezone: str | None = None  # IANA tz name; None = system local

@@ -20,6 +20,7 @@ from tg_export.config import (
     compute_to_date,
     load_checkpoint,
     load_config,
+    resolve_tz,
     save_checkpoint,
 )
 from tg_export.fetcher import entity_name, fetch_and_process_messages, get_channel_info, list_dialogs
@@ -27,6 +28,14 @@ from tg_export.models import ExportConfig
 from tg_export.renderer import HtmlRenderer
 
 console = Console()
+
+
+def _configured_tz(cfg: dict):
+    """Resolve the `timezone` config key, surfacing errors as click.UsageError."""
+    try:
+        return resolve_tz(cfg.get("timezone") or None)
+    except ValueError as exc:
+        raise click.UsageError(str(exc))
 
 
 @click.group()
@@ -134,6 +143,9 @@ def export(
         output = cfg.get("output", ExportConfig.output_dir)
     resolved_id, resolved_hash = get_api_credentials(api_id, api_hash)
 
+    tz_name = cfg.get("timezone") or None
+    tz = _configured_tz(cfg)
+
     if use_checkpoint:
         if from_date or last:
             raise click.UsageError("--from-checkpoint cannot be combined with --from-date or --last.")
@@ -141,25 +153,26 @@ def export(
         if resolved_from is None:
             raise click.UsageError("No checkpoint stored. Run an export with --save-checkpoint first.")
     else:
-        resolved_from = compute_from_date(last, from_date)
+        resolved_from = compute_from_date(last, from_date, tz)
 
     config = ExportConfig(
         output_dir=output,
         from_date=resolved_from,
-        to_date=compute_to_date(to_date),
+        to_date=compute_to_date(to_date, tz),
         limit=limit,
         download_media=not no_media,
         max_media_size_bytes=max_media_size * 1024 * 1024,
         msgs_per_page=msgs_per_page,
         use_takeout=takeout,
         wait_time=wait_time,
+        timezone=tz_name,
     )
 
     async def _export():
         client = await connect_existing(resolved_id, resolved_hash, session_dir)
         output_dir = Path(config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        renderer = HtmlRenderer(output_dir, config)
+        renderer = HtmlRenderer(output_dir, config, tz=tz)
         renderer.copy_static_assets()
 
         for i, ch in enumerate(all_channels, 1):
@@ -199,7 +212,7 @@ def export(
         if write_checkpoint:
             finished_at = datetime.now(timezone.utc)
             save_checkpoint(finished_at)
-            console.print(f"  Checkpoint: {finished_at.isoformat()} → {DEFAULT_CHECKPOINT_PATH}")
+            console.print(f"  Checkpoint: {finished_at.astimezone(tz).isoformat()} → {DEFAULT_CHECKPOINT_PATH}")
 
     asyncio.run(_export())
 
@@ -250,15 +263,16 @@ def checkpoint():
 
 @checkpoint.command("show")
 def checkpoint_show():
-    """Show the stored checkpoint datetime."""
+    """Show the stored checkpoint datetime (converted to configured timezone)."""
     path = DEFAULT_CHECKPOINT_PATH
     dt = load_checkpoint()
     if dt is None:
         console.print("No checkpoint set.")
         console.print(f"  Path: {path}")
         return
+    tz = _configured_tz(load_config())
     console.print(f"[bold]{path}[/bold]")
-    console.print(f"{CHECKPOINT_KEY} = {dt.isoformat()}")
+    console.print(f"{CHECKPOINT_KEY} = {dt.astimezone(tz).isoformat()}")
 
 
 @checkpoint.command("clear")

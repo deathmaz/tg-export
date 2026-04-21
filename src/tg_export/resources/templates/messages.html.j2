@@ -41,7 +41,7 @@
      </div>
 {% endif %}
      <div class="body">
-      <div class="pull_right date details" title="{{ item.message.date_full }}">{{ item.message.date_short }}</div>
+      <div class="pull_right date details" title="{{ item.message.date | date_full }}">{{ item.message.date | date_short }}</div>
 {% if not item.joined %}
       <div class="from_name" >
        {{ item.message.sender_name }}{% if item.message.signature %} ({{ item.message.signature }}){% endif %}
@@ -50,7 +50,7 @@
 {% if item.message.forwarded_from %}
       <div class="forwarded body">
        <div class="from_name">
-        {{ item.message.forwarded_from }}{% if item.message.forwarded_date_full %}<span class="date details" title="{{ item.message.forwarded_date_full }}"> {{ item.message.forwarded_date_short }}</span>{% endif %}
+        {{ item.message.forwarded_from }}{% if item.message.forwarded_date %}<span class="date details" title="{{ item.message.forwarded_date | date_full }}"> {{ item.message.forwarded_date | date_short }}</span>{% endif %}
        </div>
       </div>
 {% endif %}

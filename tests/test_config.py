@@ -1,6 +1,7 @@
 """Tests for configuration parsing."""
 import tomllib
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -12,6 +13,7 @@ from tg_export.config import (
     load_config,
     parse_date,
     parse_duration,
+    resolve_tz,
     save_checkpoint,
 )
 
@@ -188,3 +190,76 @@ class TestCheckpoint:
     def test_clear_missing_is_noop(self, tmp_path):
         cp = tmp_path / "nope.toml"
         assert clear_checkpoint(path=cp) is False
+
+
+class TestResolveTz:
+    def test_iana_name(self):
+        tz = resolve_tz("Europe/Berlin")
+        assert tz == ZoneInfo("Europe/Berlin")
+
+    def test_none_returns_system_local(self):
+        tz = resolve_tz(None)
+        assert tz is not None
+
+    def test_empty_string_returns_system_local(self):
+        tz = resolve_tz("")
+        assert tz is not None
+
+    def test_unknown_raises(self):
+        with pytest.raises(ValueError, match="Unknown timezone"):
+            resolve_tz("Not/AZone")
+
+
+class TestParseDateTz:
+    def test_bare_date_in_configured_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        dt = parse_date("2025-06-01", berlin)
+        # Berlin midnight on 2025-06-01 is 22:00 UTC on 2025-05-31 (DST +02:00)
+        assert dt == datetime(2025, 5, 31, 22, 0, tzinfo=timezone.utc)
+
+    def test_datetime_without_offset_uses_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        dt = parse_date("2025-06-01T12:00:00", berlin)
+        assert dt == datetime(2025, 6, 1, 10, 0, tzinfo=timezone.utc)
+
+    def test_datetime_with_explicit_offset_honored(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        dt = parse_date("2025-06-01T12:00:00+00:00", berlin)
+        assert dt == datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+
+
+class TestComputeFromDateTz:
+    def test_today_in_configured_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        result = compute_from_date("today", None, berlin)
+        now_berlin = datetime.now(berlin)
+        expected = now_berlin.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        assert result == expected
+
+    def test_yesterday_in_configured_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        result = compute_from_date("yesterday", None, berlin)
+        now_berlin = datetime.now(berlin)
+        midnight = now_berlin.replace(hour=0, minute=0, second=0, microsecond=0)
+        expected = (midnight - timedelta(days=1)).astimezone(timezone.utc)
+        assert result == expected
+
+    def test_duration_ignores_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        before = datetime.now(timezone.utc)
+        result = compute_from_date("24h", None, berlin)
+        after = datetime.now(timezone.utc)
+        # Result should fall between (before - 24h) and (after - 24h), independent of tz.
+        assert before - timedelta(hours=24, seconds=1) <= result <= after - timedelta(hours=24) + timedelta(seconds=1)
+
+    def test_from_date_bare_uses_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        result = compute_from_date(None, "2025-06-01", berlin)
+        assert result == datetime(2025, 5, 31, 22, 0, tzinfo=timezone.utc)
+
+
+class TestComputeToDateTz:
+    def test_bare_date_uses_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        result = compute_to_date("2025-06-01", berlin)
+        assert result == datetime(2025, 5, 31, 22, 0, tzinfo=timezone.utc)

@@ -2,11 +2,12 @@
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from tg_export.models import ChannelInfo, ExportConfig, ExportedMessage, MessageGroup
-from tg_export.renderer import HtmlRenderer
+from tg_export.renderer import HtmlRenderer, format_utc_offset
 
 
 def _msg(
@@ -24,8 +25,6 @@ def _msg(
     return ExportedMessage(
         id=id,
         date=date,
-        date_full=date.strftime("%d.%m.%Y %H:%M:%S UTC+00:00"),
-        date_short=date.strftime("%H:%M"),
         sender_name=sender_name,
         sender_id=sender_id,
         text_html=text_html,
@@ -301,6 +300,47 @@ class TestHtmlRendering:
             assert "from_name" in html
             assert "page_header" in html
             assert "page_body chat_page" in html
+
+    def test_html_renders_timestamps_in_configured_tz(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            config = ExportConfig(output_dir=str(output_dir), timezone="Europe/Berlin")
+            renderer = HtmlRenderer(output_dir, config)
+            renderer.copy_static_assets()
+
+            channel = ChannelInfo(id=1, title="Test", message_count=1)
+            # 10:00 UTC on 2025-06-01 = 12:00 Berlin (CEST, UTC+02:00)
+            msg_date = datetime(2025, 6, 1, 10, 0, tzinfo=timezone.utc)
+            msgs = [_msg(1, date=msg_date)]
+            chat_dir = output_dir / "chats" / "chat_1"
+            chat_dir.mkdir(parents=True)
+            renderer.render_channel(channel, msgs, chat_dir)
+
+            html = (chat_dir / "messages.html").read_text()
+            assert "12:00" in html  # Berlin HH:MM
+            assert "01.06.2025 12:00:00 UTC+02:00" in html  # tooltip
+            assert "June 01, 2025" in html  # date separator in Berlin
+
+    def test_date_separator_rolls_with_tz(self):
+        """A message at 22:00 UTC falls on next calendar day in Berlin — separator must reflect that."""
+        renderer = HtmlRenderer(Path("/tmp"), ExportConfig(timezone="Europe/Berlin"))
+        # 2025-06-01 22:00 UTC = 2025-06-02 00:00 Berlin
+        msgs = [_msg(1, date=datetime(2025, 6, 1, 22, 0, tzinfo=timezone.utc))]
+        groups = renderer._group_messages(msgs)
+        sep = [g for g in groups if isinstance(g, dict) and g.get("type") == "date_separator"][0]
+        assert sep["date"] == "June 02, 2025"
+
+    def test_format_utc_offset(self):
+        from zoneinfo import ZoneInfo
+        berlin = ZoneInfo("Europe/Berlin")
+        dt = datetime(2025, 6, 1, 12, 0, tzinfo=berlin)  # CEST +02:00
+        assert format_utc_offset(dt) == "UTC+02:00"
+        dt_utc = datetime(2025, 6, 1, tzinfo=timezone.utc)
+        assert format_utc_offset(dt_utc) == "UTC+00:00"
+        # Negative offset
+        ny = ZoneInfo("America/New_York")
+        dt_ny = datetime(2025, 6, 1, tzinfo=ny)  # EDT -04:00
+        assert format_utc_offset(dt_ny) == "UTC-04:00"
 
     def test_html_contains_pagination_links(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -203,6 +203,11 @@ channels = [
 
 # Default output directory (default: ./export)
 output = "./export"
+
+# IANA timezone name. Controls how --last today / yesterday and bare dates
+# (e.g. --from-date 2026-04-21) are interpreted, and how timestamps render
+# in the exported HTML. Omit or leave empty to use the system timezone.
+timezone = "Europe/Berlin"
 ```
 
 With a config file, you can run exports without specifying channels:
@@ -224,6 +229,22 @@ tg-export config path    # Print config file path
 
 Use `--config /path/to/config.toml` on the export command to use an alternative config file.
 
+## Timezone handling
+
+Telegram stores every message in UTC. `tg-export` keeps internal storage and the checkpoint file in UTC, but interprets user input and renders output in the configured timezone.
+
+Set `timezone` in `~/.tg-export/config.toml` to an IANA zone name (e.g. `Europe/Berlin`, `America/New_York`). If omitted, the system timezone is used.
+
+| Surface | Behavior |
+|---|---|
+| `--last today` / `yesterday` | Local calendar day in the configured timezone |
+| `--from-date 2026-04-21` (bare date) | Midnight in the configured timezone |
+| `--from-date 2026-04-21T10:00+02:00` | Explicit offset honored as-is |
+| `--last 1d`, `7d`, `24h` | Rolling window from `now` — timezone-independent |
+| Rendered HTML timestamps (`HH:MM`, tooltip, date separator) | Configured timezone |
+| Checkpoint file on disk | UTC ISO (portable) |
+| `--save-checkpoint` / `checkpoint show` console output | Configured timezone |
+
 ## Incremental Exports (Checkpoint)
 
 For recurring exports you can persist the time of the last successful run and resume from it next time, instead of picking a date manually.
@@ -236,7 +257,7 @@ tg-export export @channel --last 7d --save-checkpoint
 tg-export export @channel --from-checkpoint --save-checkpoint
 ```
 
-`--save-checkpoint` captures `datetime.now(UTC)` **after** the export finishes successfully and writes it to `~/.tg-export/checkpoint.toml`. A failed run leaves the previous checkpoint intact.
+`--save-checkpoint` captures `datetime.now(UTC)` **after** the export finishes successfully and writes it to `~/.tg-export/checkpoint.toml` (always UTC for portability). A failed run leaves the previous checkpoint intact. The console echo and `checkpoint show` convert the stored instant to the configured timezone for display.
 
 `--from-checkpoint` is mutually exclusive with `--from-date` and `--last`. If no checkpoint is stored yet, the command errors out and tells you to run with `--save-checkpoint` first.
 

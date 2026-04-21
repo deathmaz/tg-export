@@ -12,20 +12,13 @@ from telethon import TelegramClient
 from telethon.errors import TakeoutInitDelayError
 from telethon.tl.types import Channel, Chat, User
 
+from tg_export.config import ensure_utc
 from tg_export.formatters import format_message_text
 from tg_export.media import download_media, render_media_html
 from tg_export.models import ChannelInfo, ExportConfig, ExportedMessage, Reaction, Reactor
 from tg_export.renderer import get_initials, userpic_color
 
 console = Console()
-
-
-def _format_date_full(dt: datetime) -> str:
-    return dt.strftime("%d.%m.%Y %H:%M:%S UTC+00:00")
-
-
-def _format_date_short(dt: datetime) -> str:
-    return dt.strftime("%H:%M")
 
 
 def _parse_channel_ref(channel_ref: str) -> str | int:
@@ -225,7 +218,7 @@ async def fetch_and_process_messages(
                 wait_time=wait_time,
             ):
                 # Filter by from_date
-                if config.from_date and message.date.replace(tzinfo=timezone.utc) < config.from_date:
+                if config.from_date and ensure_utc(message.date) < config.from_date:
                     break
 
                 count += 1
@@ -234,9 +227,7 @@ async def fetch_and_process_messages(
                 if message.action is not None:
                     exported = ExportedMessage(
                         id=message.id,
-                        date=message.date,
-                        date_full=_format_date_full(message.date),
-                        date_short=_format_date_short(message.date),
+                        date=ensure_utc(message.date),
                         sender_name="",
                         sender_id=None,
                         text_html="",
@@ -269,17 +260,13 @@ async def fetch_and_process_messages(
 
                 media_html = render_media_html(message, media_path)
 
-                fwd_date_full = None
-                fwd_date_short = None
+                fwd_date: datetime | None = None
                 if message.fwd_from and message.fwd_from.date:
-                    fwd_date_full = _format_date_full(message.fwd_from.date)
-                    fwd_date_short = _format_date_short(message.fwd_from.date)
+                    fwd_date = ensure_utc(message.fwd_from.date)
 
                 exported = ExportedMessage(
                     id=message.id,
-                    date=message.date,
-                    date_full=_format_date_full(message.date),
-                    date_short=_format_date_short(message.date),
+                    date=ensure_utc(message.date),
                     sender_name=sender_name,
                     sender_id=sender_id,
                     text_html=text_html,
@@ -287,8 +274,7 @@ async def fetch_and_process_messages(
                     media_html=media_html,
                     reply_to_id=getattr(message.reply_to, "reply_to_msg_id", None) if message.reply_to else None,
                     forwarded_from=await _extract_forward_from(client, message, sender_cache),
-                    forwarded_date_full=fwd_date_full,
-                    forwarded_date_short=fwd_date_short,
+                    forwarded_date=fwd_date,
                     reactions=await _extract_reactions(client, message, sender_cache),
                     views=message.views,
                     signature=message.post_author,

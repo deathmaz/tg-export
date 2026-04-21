@@ -12,8 +12,6 @@ def _msg(id: int) -> ExportedMessage:
     return ExportedMessage(
         id=id,
         date=datetime(2025, 1, 1, tzinfo=timezone.utc),
-        date_full="",
-        date_short="",
         sender_name="Test",
         sender_id=1,
         text_html="msg",
